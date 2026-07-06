@@ -1,0 +1,45 @@
+{
+  "name": "@zeeky/discord-framework",
+  "version": "1.0.0",
+  "description": "Shared Discord bot framework for Zeeky6237's applications.",
+  "author": "Zeeky6237",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1Zeeky1/Discord-framework.git"
+  },
+  "bugs": {
+    "url": "https://github.com/1Zeeky1/Discord-framework/issues"
+  },
+  "homepage": "https://github.com/1Zeeky1/Discord-framework#readme",
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "prepack": "npm run build"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "chalk": "^5.6.2"
+  },
+  "peerDependencies": {
+    "discord.js": "^14.26.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.8.0",
+    "discord.js": "^14.26.4",
+    "rimraf": "^6.1.3",
+    "typescript": "^6.0.3"
+  },
+  "license": "MIT",
+  "private": true
+}
