@@ -16,8 +16,8 @@ export const DEFAULT_THEME: DiscordTheme = {
     member: 0x075f2b,
     error: 0xff4d67,
     warning: 0xffc857,
-    name: "FTW SMP",
-    footer: "FTW SMP  •  ftwsmp.net",
+    name: "Zeeky's Discord Framework",
+    footer: "",
     iconURL: ""
 };
 
