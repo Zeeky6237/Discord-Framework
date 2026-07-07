@@ -1,21 +1,28 @@
-# Discord Framework
+# @zeeky/discord-framework
 
-Private shared Discord bot framework by Zeeky6237.
+Reusable Discord bot framework by Zeeky6237.
 
 It owns the reusable command and event bases, themed reply responders, session
 and rate-limit engine, timing helpers, and dynamic module imports. Individual
 bots keep only their commands, integrations, configuration, and thin adapters
 that bind framework generics to their concrete client type.
 
-## Use from another local bot
+## Install
+
+```sh
+npm install @zeeky/discord-framework discord.js
+```
+
+`discord.js` is a peer dependency, so each bot owns the exact Discord.js
+version it runs with.
+
+## Use from a bot
 
 ```json
 {
   "dependencies": {
-    "@zeeky/discord-framework": "file:../discord-framework"
-  },
-  "scripts": {
-    "build": "npm --prefix ../discord-framework run build && tsc"
+    "@zeeky/discord-framework": "^0.1.0",
+    "discord.js": "^14.26.0"
   }
 }
 ```
@@ -86,3 +93,19 @@ await client.reloadInteractions();   // clears old routes first
 Framework source is organized by responsibility under `src/client`,
 `src/commands`, `src/events`, `src/interactions`, `src/loaders`,
 `src/handlers`, `src/services`, `src/theme`, and `src/utils`.
+
+## Local development
+
+When testing changes from a sibling bot before publishing, use a local file
+dependency:
+
+```json
+{
+  "dependencies": {
+    "@zeeky/discord-framework": "file:../discord-framework"
+  },
+  "scripts": {
+    "build": "npm --prefix ../discord-framework run build && tsc"
+  }
+}
+```
