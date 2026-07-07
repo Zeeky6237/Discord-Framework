@@ -1,4 +1,4 @@
-# @zeeky/discord-framework
+# @zeeky6237/discord-framework
 
 Reusable Discord bot framework by Zeeky6237.
 
@@ -10,7 +10,7 @@ that bind framework generics to their concrete client type.
 ## Install
 
 ```sh
-npm install @zeeky/discord-framework discord.js
+npm install @zeeky6237/discord-framework discord.js
 ```
 
 `discord.js` is a peer dependency, so each bot owns the exact Discord.js
@@ -21,7 +21,7 @@ version it runs with.
 ```json
 {
   "dependencies": {
-    "@zeeky/discord-framework": "^0.1.0",
+    "@zeeky6237/discord-framework": "^0.1.0",
     "discord.js": "^14.26.0"
   }
 }
@@ -32,7 +32,7 @@ import {
     DiscordClient,
     BaseCommand as FrameworkCommand,
     type SlashCommandContext as FrameworkSlashContext
-} from "@zeeky/discord-framework";
+} from "@zeeky6237/discord-framework";
 
 export class MyDiscordClient extends DiscordClient {
     constructor() {
@@ -70,7 +70,7 @@ Configure branding once at startup with `configureTheme(...)`. Use
 Use the shared rotating logger instead of keeping a copy in each bot:
 
 ```ts
-import { Logger } from "@zeeky/discord-framework";
+import { Logger } from "@zeeky6237/discord-framework";
 
 const logger = new Logger({
     writeToFile: true,
@@ -102,7 +102,7 @@ dependency:
 ```json
 {
   "dependencies": {
-    "@zeeky/discord-framework": "file:../discord-framework"
+    "@zeeky6237/discord-framework": "file:../discord-framework"
   },
   "scripts": {
     "build": "npm --prefix ../discord-framework run build && tsc"
