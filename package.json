@@ -1,6 +1,6 @@
 {
   "name": "@zeeky6237/discord-framework",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reusable Discord bot framework for commands, interactions, events, embeds, logging, cooldowns, and module reloading.",
   "author": "Zeeky6237",
   "main": "./dist/index.js",
