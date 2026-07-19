@@ -79,8 +79,10 @@ export async function loadCommands<TClient>(
                 }
             }
             client.commands.set(command.data.name, command);
-            (command.options.ownerGuildsOnly ? ownerCommands : globalCommands)
-                .push(command.data.toJSON());
+            if (command.options.slash !== false) {
+                (command.options.ownerGuildsOnly ? ownerCommands : globalCommands)
+                    .push(command.data.toJSON());
+            }
             client.logger.info(`├─ Loaded command /${command.data.name}`);
         }
     }

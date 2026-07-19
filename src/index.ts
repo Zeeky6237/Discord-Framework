@@ -1,5 +1,7 @@
 export * from "./client/DiscordClient.js";
 export * from "./commands/BaseCommand.js";
+export * from "./commands/commandHelper.js";
+export * from "./commands/HelpCommand.js";
 export * from "./events/BaseEvent.js";
 export * from "./handlers/responders.js";
 export * from "./interactions/BaseInteraction.js";
