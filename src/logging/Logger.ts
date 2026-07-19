@@ -6,11 +6,6 @@ import chalk from "chalk";
 
 export interface LoggerOptions {
     writeToFile?: boolean;
-    /**
-     * Kept for compatibility with older Zeeky bots. Webhook delivery belongs to
-     * the bot's audit/error service because the framework has no Discord token
-     * or webhook URL of its own.
-     */
     sendWebhook?: boolean;
     logsDirectory?: string;
     maximumFileSize?: number;
@@ -36,8 +31,7 @@ export type LogLevel =
     | "timer";
 
 /**
- * Console logger shared by Zeeky6237's Discord bots.
- *
+ * 
  * File logging rotates `latest.log` daily or when it reaches the configured
  * size. The logs directory is created lazily, so importing the framework never
  * fails in a fresh project.

@@ -62,8 +62,7 @@ export interface FrameworkModuleConfig {
 }
 
 /**
- * Shared base for Zeeky6237's Discord bots.
- *
+ * 
  * Subclasses provide their configuration, logger, integrations, and startup
  * hooks while this class owns framework state and cleanup.
  */
