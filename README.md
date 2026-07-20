@@ -39,17 +39,11 @@ export class MyDiscordClient extends DiscordClient {
         super({ intents: [...] });
         this.configureFrameworkModules({
             commands: {
-                path: "/absolute/path/to/dist/commands",
                 deployment: () => ({
                     token: this.config.token,
                     applicationId: this.config.clientId,
                     testGuilds: this.config.testGuilds
                 })
-            },
-            eventsPath: "/absolute/path/to/dist/events",
-            interactions: {
-                path: "/absolute/path/to/dist/interactions",
-                router: this.interactionRouter
             }
         });
     }
@@ -58,6 +52,12 @@ export class MyDiscordClient extends DiscordClient {
 export abstract class BaseCommand extends FrameworkCommand<MyBotClient> {}
 export type SlashCommandContext = FrameworkSlashContext<MyBotClient>;
 ```
+
+The framework automatically detects `commands`, `events`, and `interactions`
+next to the running bot entry file (for example, under `dist` or `scripts`). If
+the client exposes an `interactionRouter` property, that is detected too.
+`moduleRoot` and individual `path` options remain available for non-standard
+build layouts.
 
 `DiscordClient` creates the shared rotating logger automatically. Pass
 `{ logger }` or `{ loggerOptions }` as its second constructor argument when a

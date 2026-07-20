@@ -3,6 +3,8 @@ import {
     Collection,
     type ClientOptions
 } from "discord.js";
+import fs from "node:fs";
+import path from "node:path";
 import type { BaseCommand } from "../commands/BaseCommand.js";
 import type { BaseEvent } from "../events/BaseEvent.js";
 import {
@@ -50,14 +52,29 @@ export interface CommandDeployment {
 }
 
 export interface FrameworkModuleConfig {
+    /**
+     * Runtime directory containing commands, events, and interactions.
+     * Normally omitted because it is detected from the process entry file.
+     */
+    moduleRoot?: string;
     commands?: {
-        path: string;
+        /** Override automatic detection for non-standard layouts. */
+        path?: string;
         deployment(): CommandDeployment;
     };
+    /** @deprecated Use moduleRoot or events.path. */
     eventsPath?: string;
+    events?: {
+        /** Override automatic detection for non-standard layouts. */
+        path?: string;
+        enabled?: boolean;
+    };
     interactions?: {
-        path: string;
-        router: ClientInteractionRouter;
+        /** Override automatic detection for non-standard layouts. */
+        path?: string;
+        /** Defaults to the client's interactionRouter property. */
+        router?: ClientInteractionRouter;
+        enabled?: boolean;
     };
 }
 
@@ -92,9 +109,11 @@ export abstract class DiscordClient<
     async loadCommands(refresh = false, deploy = false): Promise<void> {
         const commands = this.moduleConfig.commands;
         if (!commands) return;
+        const commandsPath = this.resolveModuleDirectory("commands", commands.path);
+        if (!commandsPath) return;
         await loadCommandModules({
             client: this as any,
-            commandsPath: commands.path,
+            commandsPath,
             refresh,
             deploy,
             ...commands.deployment()
@@ -107,8 +126,13 @@ export abstract class DiscordClient<
     }
 
     async loadEvents(refresh = false): Promise<void> {
-        if (!this.moduleConfig.eventsPath) return;
-        await loadEventModules(this as any, this.moduleConfig.eventsPath, refresh);
+        if (this.moduleConfig.events?.enabled === false) return;
+        const eventsPath = this.resolveModuleDirectory(
+            "events",
+            this.moduleConfig.events?.path ?? this.moduleConfig.eventsPath
+        );
+        if (!eventsPath) return;
+        await loadEventModules(this as any, eventsPath, refresh);
     }
 
     async reloadEvents(): Promise<void> {
@@ -120,22 +144,27 @@ export abstract class DiscordClient<
     }
 
     async loadInteractions(refresh = false): Promise<void> {
-        const interactions = this.moduleConfig.interactions;
-        if (!interactions) return;
+        if (this.moduleConfig.interactions?.enabled === false) return;
+        const interactionsPath = this.resolveModuleDirectory(
+            "interactions",
+            this.moduleConfig.interactions?.path
+        );
+        const router = this.resolveInteractionRouter();
+        if (!interactionsPath || !router) return;
         await loadInteractionModules(
             {
                 logger: this.logger,
-                interactionRouter: interactions.router
+                interactionRouter: router
             },
-            interactions.path,
+            interactionsPath,
             refresh
         );
     }
 
     async reloadInteractions(): Promise<void> {
-        const interactions = this.moduleConfig.interactions;
-        if (!interactions) return;
-        interactions.router.clear();
+        const router = this.resolveInteractionRouter();
+        if (!router) return;
+        router.clear();
         await this.loadInteractions(true);
     }
 
@@ -159,4 +188,44 @@ export abstract class DiscordClient<
     protected startFrameworkServices(): void {
         this.sessions.startCleanup();
     }
+
+    private resolveInteractionRouter(): ClientInteractionRouter | undefined {
+        return this.moduleConfig.interactions?.router
+            ?? (this as unknown as { interactionRouter?: ClientInteractionRouter }).interactionRouter;
+    }
+
+    private resolveModuleDirectory(
+        name: "commands" | "events" | "interactions",
+        override?: string
+    ): string | undefined {
+        if (override) return path.resolve(override);
+
+        const entryDirectory = process.argv[1]
+            ? path.dirname(path.resolve(process.argv[1]))
+            : undefined;
+        const candidates = uniquePaths([
+            ...(this.moduleConfig.moduleRoot
+                ? [path.join(path.resolve(this.moduleConfig.moduleRoot), name)]
+                : []),
+            ...(entryDirectory ? [path.join(entryDirectory, name)] : []),
+            path.resolve(name),
+            path.resolve("scripts", name),
+            path.resolve("dist", name),
+            path.resolve("build", name),
+            path.resolve("src", name)
+        ]);
+        const detected = candidates.find(candidate => {
+            try {
+                return fs.statSync(candidate).isDirectory();
+            } catch {
+                return false;
+            }
+        });
+        if (detected) this.logger.debug(`Detected ${name} modules at ${detected}`);
+        return detected;
+    }
+}
+
+function uniquePaths(paths: string[]): string[] {
+    return [...new Set(paths)];
 }
