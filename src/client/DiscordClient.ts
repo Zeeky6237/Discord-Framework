@@ -9,16 +9,16 @@ import {
 
 import {
     Logger,
-    type LogColor,
-    type LogContent,
     type LoggerOptions,
+    type LogContent,
+    type LogColor,
     type LogLevel
 } from "../logging/Logger.js";
 
 import {
+    loadInteractions as loadInteractionModules,
     loadCommands as loadCommandModules,
-    loadEvents as loadEventModules,
-    loadInteractions as loadInteractionModules
+    loadEvents as loadEventModules
 } from "../loaders/index.js";
 
 import { SessionManager } from "../services/SessionManager.js";
@@ -37,12 +37,9 @@ export interface ClientLogger {
     end(message: string, silent?: boolean): void;
     writeLog(level: LogLevel, message: string, ...args: unknown[]): void;
     chalkLog(content: LogContent & { message: LogColor }, level: LogLevel): void;
-    close?(): void;
-}
-
-export interface FrameworkClientOptions {
-    logger?: ClientLogger;
-    loggerOptions?: LoggerOptions;
+    setLevel?(level: LogLevel): unknown;
+    getLevel?(): LogLevel;
+    close?(): void | Promise<void>;
 }
 
 export interface ClientInteractionRouter {
@@ -56,7 +53,9 @@ export interface CommandDeployment {
     testGuilds: Iterable<string>;
 }
 
-export interface FrameworkModuleConfig {
+export interface DiscordClientOptions extends ClientOptions {
+    /** Built-in logger settings, or a custom logger instance. */
+    logger?: LoggerOptions | ClientLogger;
     /**
      * Runtime directory containing commands, events, and interactions.
      * Normally omitted because it is detected from the process entry file.
@@ -65,7 +64,7 @@ export interface FrameworkModuleConfig {
     commands?: {
         /** Override automatic detection for non-standard layouts. */
         path?: string;
-        deployment(): CommandDeployment;
+        deployment(client: any): CommandDeployment;
     };
     /** @deprecated Use moduleRoot or events.path. */
     eventsPath?: string;
@@ -81,10 +80,12 @@ export interface FrameworkModuleConfig {
         router?: ClientInteractionRouter;
         enabled?: boolean;
     };
-    logger?: {
-        debug?: boolean;
-    }
 }
+
+type FrameworkModuleConfig = Pick<
+    DiscordClientOptions,
+    "moduleRoot" | "commands" | "eventsPath" | "events" | "interactions"
+>;
 
 /**
  * 
@@ -102,16 +103,14 @@ export abstract class DiscordClient<
     >();
     readonly sessions = new SessionManager();
     readonly logger: ClientLogger;
-    private moduleConfig: FrameworkModuleConfig = {};
+    private readonly moduleConfig: FrameworkModuleConfig;
 
-    protected constructor(options: ClientOptions, frameworkOptions: FrameworkClientOptions = {}) {
-        super(options);
-        this.logger = frameworkOptions.logger
-            ?? new Logger(frameworkOptions.loggerOptions ?? { writeToFile: true });
-    }
-
-    protected configureFrameworkModules(config: FrameworkModuleConfig): void {
-        this.moduleConfig = config;
+    protected constructor(options: DiscordClientOptions) {
+        super(discordJsOptions(options));
+        this.moduleConfig = frameworkModuleConfig(options);
+        this.logger = isClientLogger(options.logger)
+            ? options.logger
+            : new Logger({ writeToFile: true, ...options.logger });
     }
 
     async loadCommands(refresh = false, deploy = false): Promise<void> {
@@ -124,7 +123,7 @@ export abstract class DiscordClient<
             commandsPath,
             refresh,
             deploy,
-            ...commands.deployment()
+            ...commands.deployment(this)
         });
     }
 
@@ -190,7 +189,7 @@ export abstract class DiscordClient<
         this.sessions.stopCleanup();
         this.removeAllListeners();
         this.destroy();
-        this.logger.close?.();
+        await this.logger.close?.();
     }
 
     protected startFrameworkServices(): void {
@@ -236,4 +235,33 @@ export abstract class DiscordClient<
 
 function uniquePaths(paths: string[]): string[] {
     return [...new Set(paths)];
+}
+
+function discordJsOptions(options: DiscordClientOptions): ClientOptions {
+    const {
+        logger: _logger,
+        moduleRoot: _moduleRoot,
+        commands: _commands,
+        eventsPath: _eventsPath,
+        events: _events,
+        interactions: _interactions,
+        ...clientOptions
+    } = options;
+    return clientOptions;
+}
+
+function frameworkModuleConfig(options: DiscordClientOptions): FrameworkModuleConfig {
+    return {
+        ...(options.moduleRoot ? { moduleRoot: options.moduleRoot } : {}),
+        ...(options.commands ? { commands: options.commands } : {}),
+        ...(options.eventsPath ? { eventsPath: options.eventsPath } : {}),
+        ...(options.events ? { events: options.events } : {}),
+        ...(options.interactions ? { interactions: options.interactions } : {})
+    };
+}
+
+function isClientLogger(logger: LoggerOptions | ClientLogger | undefined): logger is ClientLogger {
+    return Boolean(logger)
+        && typeof (logger as Partial<ClientLogger>).info === "function"
+        && typeof (logger as Partial<ClientLogger>).error === "function";
 }

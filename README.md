@@ -21,7 +21,7 @@ version it runs with.
 ```json
 {
   "dependencies": {
-    "@zeeky6237/discord-framework": "^0.1.0",
+    "@zeeky6237/discord-framework": "^0.2.0",
     "discord.js": "^14.26.0"
   }
 }
@@ -36,13 +36,21 @@ import {
 
 export class MyDiscordClient extends DiscordClient {
     constructor() {
-        super({ intents: [...] });
-        this.configureFrameworkModules({
+        super({
+            intents: [...],
+            logger: {
+                level: "debug",
+                webhook: {
+                    url: process.env.LOG_WEBHOOK_URL!,
+                    level: "error",
+                    username: "My Bot Logs"
+                }
+            },
             commands: {
-                deployment: () => ({
-                    token: this.config.token,
-                    applicationId: this.config.clientId,
-                    testGuilds: this.config.testGuilds
+                deployment: client => ({
+                    token: client.config.token,
+                    applicationId: client.config.clientId,
+                    testGuilds: client.config.testGuilds
                 })
             }
         });
@@ -59,9 +67,16 @@ the client exposes an `interactionRouter` property, that is detected too.
 `moduleRoot` and individual `path` options remain available for non-standard
 build layouts.
 
-`DiscordClient` creates the shared rotating logger automatically. Pass
-`{ logger }` or `{ loggerOptions }` as its second constructor argument when a
-bot needs custom behavior.
+All framework configuration is passed to `super(...)`; there is no separate
+configuration call. Set `logger.level` to control the minimum local log
+severity. `debug` shows everything; `info` also includes success and timer
+messages; then `warn`, `error`, and `fatal` become progressively quieter.
+`logger.webhook.level` is an independent threshold and defaults to `error`, so
+debug and informational output can remain local without flooding Discord. Keep
+the webhook URL in an environment variable rather than source control.
+
+`DiscordClient` creates the shared rotating logger automatically. The `logger`
+option accepts either built-in logger settings or a custom logger instance.
 
 Configure branding once at startup with `configureTheme(...)`. Use
 `interactionResponder(...)` and `messageResponder(...)` to provide identical
@@ -73,6 +88,7 @@ Use the shared rotating logger instead of keeping a copy in each bot:
 import { Logger } from "@zeeky6237/discord-framework";
 
 const logger = new Logger({
+    level: "info",
     writeToFile: true,
     logsDirectory: "./logs"
 });
