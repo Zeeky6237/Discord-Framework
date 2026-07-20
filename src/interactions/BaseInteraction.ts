@@ -1,9 +1,9 @@
 import type {
     AnySelectMenuInteraction,
     AutocompleteInteraction,
+    ModalSubmitInteraction,
     ButtonInteraction,
     EmbedBuilder,
-    ModalSubmitInteraction
 } from "discord.js";
 import type { CommandEmbedReply, CommandReply } from "../commands/BaseCommand.js";
 

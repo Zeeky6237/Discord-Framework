@@ -1,8 +1,8 @@
 import { pathToFileURL } from "node:url";
 
-// Cache-bustable dynamic imports used by framework loaders.
+// Private, cache-bustable dynamic imports used by framework loaders.
 
-export interface ImportLogger {
+interface ImportLogger {
     warn(message: string): void;
 }
 

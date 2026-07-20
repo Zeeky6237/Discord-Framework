@@ -1,10 +1,12 @@
-import fs from "node:fs";
 import path from "node:path";
-import {
-    REST,
-    Routes,
+import fs from "node:fs";
+
+import { 
+    REST, 
+    Routes, 
     type RESTPostAPIChatInputApplicationCommandsJSONBody
 } from "discord.js";
+
 import { BaseCommand, BaseSubcommand } from "../commands/BaseCommand.js";
 import { importClassFile } from "../utils/imports.js";
 import type { LoaderLogger } from "./types.js";

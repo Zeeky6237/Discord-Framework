@@ -8,6 +8,7 @@ import {
     type APIEmbedField,
     type PermissionsBitField
 } from "discord.js";
+
 import {
     BaseCommand,
     type BaseSubcommand,
@@ -17,8 +18,7 @@ import {
     type SlashCommandContext,
     type ChatCommandContext
 } from "./BaseCommand.js";
-import type { InteractionRoute } from "../interactions/BaseInteraction.js";
-import { themedEmbed, withRequester } from "../theme/index.js";
+
 import {
     commandAvailable,
     commandDescription,
@@ -30,6 +30,9 @@ import {
     usageLines,
     viewerPermissionLevel
 } from "./commandHelper.js";
+
+import type { InteractionRoute } from "../interactions/BaseInteraction.js";
+import { themedEmbed, withRequester } from "../theme/index.js";
 
 export interface HelpClient<TClient> {
     commands: Map<string, BaseCommand<TClient>>;

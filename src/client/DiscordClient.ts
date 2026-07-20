@@ -1,12 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import {
     Client as DiscordJsClient,
     Collection,
     type ClientOptions
 } from "discord.js";
-import fs from "node:fs";
-import path from "node:path";
-import type { BaseCommand } from "../commands/BaseCommand.js";
-import type { BaseEvent } from "../events/BaseEvent.js";
+
 import {
     Logger,
     type LogColor,
@@ -14,12 +14,17 @@ import {
     type LoggerOptions,
     type LogLevel
 } from "../logging/Logger.js";
-import { SessionManager } from "../services/SessionManager.js";
+
 import {
     loadCommands as loadCommandModules,
     loadEvents as loadEventModules,
     loadInteractions as loadInteractionModules
 } from "../loaders/index.js";
+
+import { SessionManager } from "../services/SessionManager.js";
+import type { BaseCommand } from "../commands/BaseCommand.js";
+import type { BaseEvent } from "../events/BaseEvent.js";
+
 
 export interface ClientLogger {
     info(message: string, ...args: unknown[]): void;
@@ -76,6 +81,9 @@ export interface FrameworkModuleConfig {
         router?: ClientInteractionRouter;
         enabled?: boolean;
     };
+    logger?: {
+        debug?: boolean;
+    }
 }
 
 /**

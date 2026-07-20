@@ -1,5 +1,6 @@
-import fs from "node:fs";
 import path from "node:path";
+import fs from "node:fs";
+
 import type { BaseEvent } from "../events/BaseEvent.js";
 import { importFile } from "../utils/imports.js";
 import type { LoaderLogger } from "./types.js";

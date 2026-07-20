@@ -3,12 +3,14 @@ import {
     PermissionFlagsBits,
     type PermissionsBitField
 } from "discord.js";
+
 import type {
     BaseCommand,
     BaseSubcommand,
     CommandPermissionLevel,
     CommandSource
 } from "./BaseCommand.js";
+
 
 const PERMISSION_ORDER: Record<CommandPermissionLevel, number> = {
     everyone: 0,
