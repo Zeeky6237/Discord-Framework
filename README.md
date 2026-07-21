@@ -72,8 +72,10 @@ configuration call. Set `logger.level` to control the minimum local log
 severity. `debug` shows everything; `info` also includes success and timer
 messages; then `warn`, `error`, and `fatal` become progressively quieter.
 `logger.webhook.level` is an independent threshold and defaults to `error`, so
-debug and informational output can remain local without flooding Discord. Keep
-the webhook URL in an environment variable rather than source control.
+debug and informational output can remain local without flooding Discord.
+Webhook entries use embeds with coordinated colors for debug, info, success,
+timer, warning, error, and fatal messages. Keep the webhook URL in an
+environment variable rather than source control.
 
 `DiscordClient` creates the shared rotating logger automatically. The `logger`
 option accepts either built-in logger settings or a custom logger instance.

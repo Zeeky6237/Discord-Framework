@@ -31,6 +31,12 @@ export interface LogContent {
     args: unknown[];
 }
 
+interface WebhookLogEntry {
+    level: LogLevel;
+    description: string;
+    timestamp: string;
+}
+
 export type LogLevel =
     | "debug"
     | "info"
@@ -54,7 +60,7 @@ export class Logger {
     private stream: fs.WriteStream | undefined;
     private startTime = 0;
     private level: LogLevel;
-    private readonly webhookQueue: string[] = [];
+    private readonly webhookQueue: WebhookLogEntry[] = [];
     private webhookWorker: Promise<void> | undefined;
 
     constructor(private readonly options: LoggerOptions = {}) {
@@ -127,7 +133,7 @@ export class Logger {
             console.log(formatted.colored, ...args);
             if (this.options.writeToFile) this.writeToFile(formatted.uncolored, ...args);
         }
-        if (webhook) this.enqueueWebhook(formatted.uncolored, args);
+        if (webhook) this.enqueueWebhook(level, message, args);
     }
 
     chalkLog(content: LogContent & { message: LogColor }, level: LogLevel): void {
@@ -140,7 +146,7 @@ export class Logger {
             if (this.options.writeToFile) this.writeToFile(uncolored, ...content.args);
             console.log(colored, ...content.args);
         }
-        if (webhook) this.enqueueWebhook(uncolored, content.args);
+        if (webhook) this.enqueueWebhook(level, content.message.uncolored, content.args);
     }
 
     async close(): Promise<void> {
@@ -160,8 +166,12 @@ export class Logger {
             && LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[webhook?.level ?? "error"];
     }
 
-    private enqueueWebhook(message: string, args: unknown[]): void {
-        this.webhookQueue.push(truncateWebhookContent(`${message}${formatArguments(args)}`));
+    private enqueueWebhook(level: LogLevel, message: string, args: unknown[]): void {
+        this.webhookQueue.push({
+            level,
+            description: truncateWebhookDescription(`${message}${formatArguments(args)}`),
+            timestamp: new Date().toISOString()
+        });
         if (!this.webhookWorker) {
             this.webhookWorker = this.drainWebhookQueue().finally(() => {
                 this.webhookWorker = undefined;
@@ -180,12 +190,12 @@ export class Logger {
 
     private async drainWebhookQueue(): Promise<void> {
         while (this.webhookQueue.length) {
-            const content = this.webhookQueue.shift();
-            if (content) await this.deliverWebhook(content);
+            const entry = this.webhookQueue.shift();
+            if (entry) await this.deliverWebhook(entry);
         }
     }
 
-    private async deliverWebhook(content: string): Promise<void> {
+    private async deliverWebhook(entry: WebhookLogEntry): Promise<void> {
         const webhook = this.options.webhook;
         if (!webhook?.url) return;
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -194,7 +204,13 @@ export class Logger {
                     method: "POST",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({
-                        content,
+                        embeds: [{
+                            title: `${entry.level.toUpperCase()} Log`,
+                            description: "```" + entry.description + "```",
+                            color: WEBHOOK_COLORS[entry.level],
+                            timestamp: entry.timestamp,
+                            footer: { text: "Logger" }
+                        }],
                         ...(webhook.username ? { username: webhook.username } : {}),
                         ...(webhook.avatarURL ? { avatar_url: webhook.avatarURL } : {})
                     })
@@ -284,8 +300,18 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
     fatal: 4
 };
 
-function truncateWebhookContent(content: string): string {
-    const maximumLength = 1_900;
+const WEBHOOK_COLORS: Record<LogLevel, number> = {
+    debug: 0x95a5a6,
+    info: 0x3498db,
+    success: 0x2ecc71,
+    timer: 0x00bcd4,
+    warn: 0xf1c40f,
+    error: 0xe74c3c,
+    fatal: 0x992d22
+};
+
+function truncateWebhookDescription(content: string): string {
+    const maximumLength = 4_000;
     return content.length <= maximumLength
         ? content
         : `${content.slice(0, maximumLength - 14)}\n…[truncated]`;
