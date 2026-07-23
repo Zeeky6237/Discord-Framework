@@ -25,6 +25,19 @@ import { SessionManager } from "../services/SessionManager.js";
 import type { BaseCommand } from "../commands/BaseCommand.js";
 import type { BaseEvent } from "../events/BaseEvent.js";
 
+import {
+    BuiltInHelpCommand,
+    builtInHelpPageRoute,
+    replyInvalidUsage as sendInvalidUsage,
+    type HelpCommandConfig,
+    type HelpOptions
+} from "../commands/HelpCommand.js";
+
+import type {
+    ChatCommandContext,
+    SlashCommandContext
+} from "../commands/BaseCommand.js";
+
 
 export interface ClientLogger {
     info(message: string, ...args: unknown[]): void;
@@ -65,6 +78,14 @@ export interface DiscordClientOptions extends ClientOptions {
         /** Override automatic detection for non-standard layouts. */
         path?: string;
         deployment(client: any): CommandDeployment;
+        /** Prefix used by message commands and generated usage text. */
+        prefix?(client: any): string;
+        /** Determines whether a user has bot-owner help visibility. */
+        isOwner?(client: any, userId: string): boolean;
+        /** Enable and configure the framework-owned help command. */
+        help?: boolean | HelpOptions<any>;
+        /** Show generated usage and examples for invalid syntax. Defaults to true. */
+        invalidUsageHelper?: boolean;
     };
     /** @deprecated Use moduleRoot or events.path. */
     eventsPath?: string;
@@ -117,12 +138,13 @@ export abstract class DiscordClient<
         const commands = this.moduleConfig.commands;
         if (!commands) return;
         const commandsPath = this.resolveModuleDirectory("commands", commands.path);
-        if (!commandsPath) return;
+        if (!commandsPath && !this.helpEnabled()) return;
         await loadCommandModules({
             client: this as any,
-            commandsPath,
+            ...(commandsPath ? { commandsPath } : {}),
             refresh,
             deploy,
+            builtInCommands: this.builtInCommands(),
             ...commands.deployment(this)
         });
     }
@@ -151,21 +173,28 @@ export abstract class DiscordClient<
     }
 
     async loadInteractions(refresh = false): Promise<void> {
-        if (this.moduleConfig.interactions?.enabled === false) return;
+        const router = this.resolveInteractionRouter();
+        if (!router) return;
         const interactionsPath = this.resolveModuleDirectory(
             "interactions",
             this.moduleConfig.interactions?.path
         );
-        const router = this.resolveInteractionRouter();
-        if (!interactionsPath || !router) return;
-        await loadInteractionModules(
-            {
-                logger: this.logger,
-                interactionRouter: router
-            },
-            interactionsPath,
-            refresh
-        );
+        if (this.moduleConfig.interactions?.enabled !== false && interactionsPath) {
+            await loadInteractionModules(
+                {
+                    logger: this.logger,
+                    interactionRouter: router
+                },
+                interactionsPath,
+                refresh
+            );
+        }
+        const helpConfig = this.helpEnabled() ? this.helpConfig(true) : undefined;
+        if (helpConfig) {
+            const help = this.moduleConfig.commands?.help;
+            const route = typeof help === "object" ? help.route : undefined;
+            router.register(builtInHelpPageRoute(helpConfig, route ?? "framework-help-page"));
+        }
     }
 
     async reloadInteractions(): Promise<void> {
@@ -196,9 +225,63 @@ export abstract class DiscordClient<
         this.sessions.startCleanup();
     }
 
+    async replyInvalidUsage(
+        context: Pick<SlashCommandContext<any> | ChatCommandContext<any>,
+            "client" | "source" | "commandName" | "subcommandName" | "embedReply">,
+        message?: string
+    ): Promise<void> {
+        const config = this.helpConfig(false);
+        if (!config) {
+            await context.embedReply({
+                tone: "error",
+                title: "Invalid command",
+                description: message ?? "The command arguments do not match the expected syntax."
+            });
+            return;
+        }
+        await sendInvalidUsage(config, context, message);
+    }
+
     private resolveInteractionRouter(): ClientInteractionRouter | undefined {
         return this.moduleConfig.interactions?.router
             ?? (this as unknown as { interactionRouter?: ClientInteractionRouter }).interactionRouter;
+    }
+
+    private builtInCommands(): BaseCommand<any>[] {
+        if (!this.helpEnabled()) return [];
+        const config = this.helpConfig(Boolean(this.resolveInteractionRouter()));
+        return config ? [new BuiltInHelpCommand(config)] : [];
+    }
+
+    private helpEnabled(): boolean {
+        const help = this.moduleConfig.commands?.help;
+        return help === true || typeof help === "object";
+    }
+
+    private helpConfig(pagination: boolean): HelpCommandConfig<any> | undefined {
+        const commands = this.moduleConfig.commands;
+        if (!commands) return;
+        const rawHelp = commands.help;
+        const helpEnabled = rawHelp === true || typeof rawHelp === "object";
+        if (!helpEnabled && commands.invalidUsageHelper === undefined) return;
+        const help = typeof rawHelp === "object" ? rawHelp : {};
+        const route = help.route ?? "framework-help-page";
+        const { route: _route, ...helpOptions } = help;
+        return {
+            ...helpOptions,
+            prefix: commands.prefix ?? (() => "!"),
+            isOwner: commands.isOwner ?? (() => false),
+            helpCommand: helpEnabled,
+            invalidUsageHelper: commands.invalidUsageHelper ?? true,
+            ...(pagination ? {
+                createPageCustomId: (_client, source, page, userId) => [
+                    route,
+                    source,
+                    page,
+                    userId
+                ].map(value => encodeURIComponent(String(value))).join(":")
+            } : {})
+        };
     }
 
     private resolveModuleDirectory(

@@ -139,65 +139,49 @@ class PingCommand extends BaseCommand<MyBotClient> {
 }
 ```
 
-The package includes a configurable help command factory. Put this in the
-`index.ts` for the help command in your bot's normal commands directory:
+Enable and configure the framework-owned help command directly in the client
+constructor. The framework deploys it and registers its pagination route
+automatically:
 
 ```ts
-import { ButtonStyle } from "discord.js";
-import {
-    createHelpCommand,
-    type HelpCommandConfig
-} from "@zeeky6237/discord-framework";
-import type { MyBotClient } from "../../../client.js";
-
-export const helpConfig: HelpCommandConfig<MyBotClient> = {
-    prefix: client => client.config.prefix,
-    isOwner: (client, userId) => client.config.ownerIds.has(userId),
-
-    // These are independent. Both default to true.
-    helpCommand: true,
-    invalidUsageHelper: true,
-
-    // Optional. Omit this and lists still work without page buttons.
-    createPageCustomId: (client, source, page, userId) =>
-        client.interactionRouter.createCustomId("help-page", source, page, userId),
-
-    // Every part of the content and appearance can be replaced.
-    design: {
-        pageSize: 6,
-        listTitle: (source, page, pages) =>
-            `${source === "slash" ? "Slash" : "Message"} command center · ${page + 1}/${pages}`,
-        levelLabel: level => ({
-            everyone: "Community",
-            moderator: "Moderation",
-            administrator: "Administration",
-            owner: "Development"
-        })[level],
-        entry: entry => `**${entry.name}**\n${entry.description}`,
-        previousStyle: ButtonStyle.Secondary,
-        nextStyle: ButtonStyle.Success,
-        // Return an EmbedBuilder here for completely custom embed design.
-        transform: embed => embed
-    },
-
-    // Optional per-user/per-surface visibility beyond permission metadata.
-    show: (entry, { source }) =>
-        source === "slash" || entry.command.options.chat === true
-};
-
-export default createHelpCommand(helpConfig);
+super({
+    intents: [...],
+    commands: {
+        prefix: client => client.config.prefix,
+        isOwner: (client, userId) => client.config.ownerIds.has(userId),
+        invalidUsageHelper: true,
+        help: {
+            design: {
+                pageSize: 6,
+                listTitle: (source, page, pages) =>
+                    `${source === "slash" ? "Slash" : "Message"} command center · ${page + 1}/${pages}`,
+                levelLabel: level => ({
+                    everyone: "Community",
+                    moderator: "Moderation",
+                    administrator: "Administration",
+                    owner: "Development"
+                })[level],
+                entry: entry => `**${entry.name}**\n${entry.description}`
+            },
+            show: (entry, { source }) =>
+                source === "slash" || entry.command.options.chat === true
+        },
+        deployment: client => ({
+            token: client.config.token,
+            applicationId: client.config.clientId,
+            testGuilds: client.config.testGuilds
+        })
+    }
+});
 ```
 
-Setting `helpCommand: false` prevents `/help` from being deployed and disables
-its message-command form. Setting `invalidUsageHelper: false` keeps the basic
-invalid-command response but stops it from reading and displaying usage and
-example metadata.
+Omit `help` or set `help: false` to disable the built-in command. Set
+`invalidUsageHelper: false` to keep a basic invalid-command response without
+displaying generated usage and example metadata.
 
 Wire the second option into both slash and message command contexts:
 
 ```ts
-import { createInvalidUsageHelper } from "@zeeky6237/discord-framework";
-
 const context = {
     ...responder,
     client,
@@ -208,18 +192,8 @@ const context = {
 
 const commandContext = {
     ...context,
-    invalidSyntax: createInvalidUsageHelper(helpConfig, context)
+    invalidSyntax: message => client.replyInvalidUsage(context, message)
 };
-```
-
-If pagination is enabled, register the matching framework interaction route in
-your interaction directory:
-
-```ts
-import { createHelpPageRoute } from "@zeeky6237/discord-framework";
-import { helpConfig } from "../../commands/general/help/index.js";
-
-export default createHelpPageRoute(helpConfig);
 ```
 
 The exported command helpers are `commandAvailable`, `subcommandAvailable`,

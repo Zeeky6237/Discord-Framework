@@ -13,6 +13,7 @@ import {
     BaseCommand,
     type BaseSubcommand,
     type CommandEmbedReply,
+    type CommandOptions,
     type CommandPermissionLevel,
     type CommandSource,
     type SlashCommandContext,
@@ -83,6 +84,14 @@ export interface HelpCommandConfig<TClient extends HelpClient<TClient>> {
     createPageCustomId?(client: TClient, source: CommandSource, page: number, userId: string): string;
 }
 
+export type HelpOptions<TClient extends HelpClient<TClient>> = Omit<
+    HelpCommandConfig<TClient>,
+    "prefix" | "isOwner" | "helpCommand" | "invalidUsageHelper" | "createPageCustomId"
+> & {
+    /** Interaction route used by the built-in pagination buttons. */
+    route?: string;
+};
+
 export interface HelpPage {
     embed: CommandEmbedReply | EmbedBuilder;
     components: ActionRowBuilder<ButtonBuilder>[];
@@ -92,11 +101,13 @@ export interface HelpPage {
 
 const DEFAULT_LEVELS: CommandPermissionLevel[] = ["everyone", "moderator", "administrator", "owner"];
 
-export function createHelpCommand<TClient extends HelpClient<TClient>>(
-    config: HelpCommandConfig<TClient>
-): new () => BaseCommand<TClient> {
-    return class HelpCommand extends BaseCommand<TClient> {
-        data = new SlashCommandBuilder()
+export class BuiltInHelpCommand<TClient extends HelpClient<TClient>> extends BaseCommand<TClient> {
+    data: BaseCommand<TClient>["data"];
+    options: CommandOptions;
+
+    constructor(private readonly config: HelpCommandConfig<TClient>) {
+        super();
+        this.data = new SlashCommandBuilder()
             .setName(config.name ?? "help")
             .setDescription(config.description ?? "Show commands available to you")
             .addStringOption(option => option
@@ -104,10 +115,9 @@ export function createHelpCommand<TClient extends HelpClient<TClient>>(
                 .setDescription("Command to show usage and examples for")
                 .setMaxLength(64));
 
-        options = {
-            slash: config.helpCommand === false ? false : config.slash ?? true,
-            chat: config.helpCommand === false ? false : config.chat ?? true,
-            hidden: config.helpCommand === false,
+        this.options = {
+            slash: config.slash ?? true,
+            chat: config.chat ?? true,
             aliases: config.aliases ?? ["commands"],
             category: config.category ?? "General",
             usage: {
@@ -115,72 +125,70 @@ export function createHelpCommand<TClient extends HelpClient<TClient>>(
                 chat: [`{prefix}${config.name ?? "help"} [command]`]
             }
         };
+    }
 
-        async execute(ctx: SlashCommandContext<TClient> | ChatCommandContext<TClient>): Promise<void> {
-            if (config.helpCommand === false) return;
-            const query = ctx.source === "slash"
-                ? ctx.interaction.options.getString("command")?.trim()
-                : ctx.args.join(" ").trim();
-            const permissions = ctx.source === "slash"
-                ? ctx.interaction.memberPermissions
-                : ctx.message.member?.permissions;
-            if (query) await replyWithDetail(config, ctx, query, permissions);
-            else {
-                const result = buildHelpPage(config, ctx.client, ctx.source, ctx.userId, permissions, 0);
-                if (result.embed instanceof EmbedBuilder) {
-                    const displayName = ctx.source === "slash"
-                        ? ctx.interaction.user.displayName
-                        : ctx.message.member?.displayName ?? ctx.message.author.displayName;
-                    const avatarURL = ctx.source === "slash"
-                        ? ctx.interaction.user.displayAvatarURL({ size: 64 })
-                        : ctx.message.author.displayAvatarURL({ size: 64 });
-                    withRequester(result.embed, displayName, avatarURL);
-                    await ctx.reply({ embeds: [result.embed], components: result.components });
-                } else await ctx.embedReply({ ...result.embed, components: result.components });
-            }
+    async execute(ctx: SlashCommandContext<TClient> | ChatCommandContext<TClient>): Promise<void> {
+        const config = this.config;
+        const query = ctx.source === "slash"
+            ? ctx.interaction.options.getString("command")?.trim()
+            : ctx.args.join(" ").trim();
+        const permissions = ctx.source === "slash"
+            ? ctx.interaction.memberPermissions
+            : ctx.message.member?.permissions;
+        if (query) await replyWithDetail(config, ctx, query, permissions);
+        else {
+            const result = buildHelpPage(config, ctx.client, ctx.source, ctx.userId, permissions, 0);
+            if (result.embed instanceof EmbedBuilder) {
+                const displayName = ctx.source === "slash"
+                    ? ctx.interaction.user.displayName
+                    : ctx.message.member?.displayName ?? ctx.message.author.displayName;
+                const avatarURL = ctx.source === "slash"
+                    ? ctx.interaction.user.displayAvatarURL({ size: 64 })
+                    : ctx.message.author.displayAvatarURL({ size: 64 });
+                withRequester(result.embed, displayName, avatarURL);
+                await ctx.reply({ embeds: [result.embed], components: result.components });
+            } else await ctx.embedReply({ ...result.embed, components: result.components });
         }
-    };
+    }
 }
 
 /**
- * Creates the `invalidSyntax` callback used by a command context. When the
- * helper is disabled it still sends the supplied error, but does not inspect
- * or reveal command usage metadata.
+ * Sends the invalid-syntax response used by DiscordClient. When the helper is
+ * disabled it still sends the supplied error without revealing usage metadata.
  */
-export function createInvalidUsageHelper<TClient extends HelpClient<TClient>>(
+export async function replyInvalidUsage<TClient extends HelpClient<TClient>>(
     config: HelpCommandConfig<TClient>,
     context: Pick<SlashCommandContext<TClient> | ChatCommandContext<TClient>,
-        "client" | "source" | "commandName" | "subcommandName" | "embedReply">
-): (message?: string) => Promise<void> {
-    return async (message = "The command arguments do not match the expected syntax.") => {
-        const base: CommandEmbedReply = {
-            tone: "error",
-            title: config.invalidUsageHelper === false ? "Invalid command" : "Invalid command syntax",
-            description: message
-        };
-        if (config.invalidUsageHelper === false) {
-            await context.embedReply(transform(config, base, "error", context.source));
-            return;
-        }
-        const command = context.client.commands.get(context.commandName);
-        if (!command) {
-            await context.embedReply(transform(config, base, "error", context.source));
-            return;
-        }
-        const subcommand = context.subcommandName
-            ? command.subcommands.get(context.subcommandName)
-            : undefined;
-        const prefix = config.prefix(context.client);
-        const usage = usageLines(command, context.source, prefix, subcommand);
-        const examples = exampleLines(command, context.source, prefix, subcommand);
-        await context.embedReply(transform(config, {
-            ...base,
-            fields: [
-                { name: "Usage", value: usage.map(line => `\`${line}\``).join("\n") },
-                ...(examples.length ? [{ name: "Examples", value: examples.map(line => `\`${line}\``).join("\n") }] : [])
-            ]
-        }, "error", context.source));
+        "client" | "source" | "commandName" | "subcommandName" | "embedReply">,
+    message = "The command arguments do not match the expected syntax."
+): Promise<void> {
+    const base: CommandEmbedReply = {
+        tone: "error",
+        title: config.invalidUsageHelper === false ? "Invalid command" : "Invalid command syntax",
+        description: message
     };
+    if (config.invalidUsageHelper === false) {
+        await context.embedReply(transform(config, base, "error", context.source));
+        return;
+    }
+    const command = context.client.commands.get(context.commandName);
+    if (!command) {
+        await context.embedReply(transform(config, base, "error", context.source));
+        return;
+    }
+    const subcommand = context.subcommandName
+        ? command.subcommands.get(context.subcommandName)
+        : undefined;
+    const prefix = config.prefix(context.client);
+    const usage = usageLines(command, context.source, prefix, subcommand);
+    const examples = exampleLines(command, context.source, prefix, subcommand);
+    await context.embedReply(transform(config, {
+        ...base,
+        fields: [
+            { name: "Usage", value: usage.map(line => `\`${line}\``).join("\n") },
+            ...(examples.length ? [{ name: "Examples", value: examples.map(line => `\`${line}\``).join("\n") }] : [])
+        ]
+    }, "error", context.source));
 }
 
 export function buildHelpPage<TClient extends HelpClient<TClient>>(
@@ -225,7 +233,7 @@ export function buildHelpPage<TClient extends HelpClient<TClient>>(
     };
 }
 
-export function createHelpPageRoute<TClient extends HelpClient<TClient>>(
+export function builtInHelpPageRoute<TClient extends HelpClient<TClient>>(
     config: HelpCommandConfig<TClient>,
     route = "help-page"
 ): InteractionRoute<TClient, "button"> {

@@ -18,12 +18,13 @@ export interface CommandLoaderClient<TClient> {
 
 export interface CommandLoaderOptions<TClient> {
     client: TClient & CommandLoaderClient<TClient>;
-    commandsPath: string;
+    commandsPath?: string;
     refresh?: boolean;
     deploy?: boolean;
     token: string;
     applicationId: string;
     testGuilds: Iterable<string>;
+    builtInCommands?: Iterable<BaseCommand<TClient>>;
 }
 
 export async function loadCommands<TClient>(
@@ -38,8 +39,8 @@ export async function loadCommands<TClient>(
     const globalCommands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [];
     const ownerCommands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [];
 
-    for (const category of fs.readdirSync(commandsPath)) {
-        const categoryPath = path.join(commandsPath, category);
+    for (const category of commandsPath ? fs.readdirSync(commandsPath) : []) {
+        const categoryPath = path.join(commandsPath ?? "", category);
         if (!fs.statSync(categoryPath).isDirectory()) continue;
         for (const commandFolder of fs.readdirSync(categoryPath)) {
             const commandPath = path.join(categoryPath, commandFolder);
@@ -80,6 +81,19 @@ export async function loadCommands<TClient>(
             }
             client.logger.info(`├─ Loaded command /${command.data.name}`);
         }
+    }
+
+    for (const command of options.builtInCommands ?? []) {
+        if (client.commands.has(command.data.name)) {
+            client.logger.warn(`Skipped built-in /${command.data.name}; a bot command already uses that name.`);
+            continue;
+        }
+        client.commands.set(command.data.name, command);
+        if (command.options.slash !== false) {
+            (command.options.ownerGuildsOnly ? ownerCommands : globalCommands)
+                .push(command.data.toJSON());
+        }
+        client.logger.info(`├─ Loaded built-in command /${command.data.name}`);
     }
 
     if ((!refresh && (globalCommands.length || ownerCommands.length)) || deploy) {
