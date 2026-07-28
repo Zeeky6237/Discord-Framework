@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -35,3 +35,45 @@ jobs:
 
       - name: Publish to npm
         run: npm publish
+
+      - name: Prepare release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package_name="$(node -p "require('./package.json').name.split('/').pop()")"
+          package_version="$(node -p "require('./package.json').version")"
+          release_tag="v${package_version}"
+
+          mkdir -p release-artifacts/package
+          npm pack --pack-destination release-artifacts
+
+          tarball="$(find release-artifacts -maxdepth 1 -name '*.tgz' -print -quit)"
+          tar -xzf "${tarball}" -C release-artifacts/package --strip-components=1
+
+          tar -czf "release-artifacts/${package_name}-${package_version}.tar.gz" -C release-artifacts/package .
+          (cd release-artifacts/package && zip -qr "../${package_name}-${package_version}.zip" .)
+
+          echo "RELEASE_TAG=${release_tag}" >> "$GITHUB_ENV"
+          echo "PACKAGE_VERSION=${package_version}" >> "$GITHUB_ENV"
+          echo "PACKAGE_NAME=${package_name}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" \
+              "release-artifacts/${PACKAGE_NAME}-${PACKAGE_VERSION}.zip" \
+              "release-artifacts/${PACKAGE_NAME}-${PACKAGE_VERSION}.tar.gz" \
+              --clobber
+          else
+            gh release create "${RELEASE_TAG}" \
+              "release-artifacts/${PACKAGE_NAME}-${PACKAGE_VERSION}.zip" \
+              "release-artifacts/${PACKAGE_NAME}-${PACKAGE_VERSION}.tar.gz" \
+              --title "${RELEASE_TAG}" \
+              --generate-notes
+          fi
