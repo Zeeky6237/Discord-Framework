@@ -63,7 +63,8 @@ export interface ClientInteractionRouter {
 export interface CommandDeployment {
     token: string;
     applicationId: string;
-    testGuilds: Iterable<string>;
+    /** Guilds that receive development-only commands. */
+    developmentGuilds?: Iterable<string>;
 }
 
 export interface DiscordClientOptions extends ClientOptions {

@@ -23,7 +23,7 @@ export interface CommandLoaderOptions<TClient> {
     deploy?: boolean;
     token: string;
     applicationId: string;
-    testGuilds: Iterable<string>;
+    developmentGuilds?: Iterable<string>;
     builtInCommands?: Iterable<BaseCommand<TClient>>;
 }
 
@@ -102,7 +102,7 @@ export async function loadCommands<TClient>(
             Routes.applicationCommands(options.applicationId),
             { body: globalCommands }
         );
-        for (const guildId of options.testGuilds) {
+        for (const guildId of options.developmentGuilds ?? []) {
             await rest.put(
                 Routes.applicationGuildCommands(options.applicationId, guildId),
                 { body: ownerCommands }

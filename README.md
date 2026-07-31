@@ -169,7 +169,7 @@ super({
         deployment: client => ({
             token: client.config.token,
             applicationId: client.config.clientId,
-            testGuilds: client.config.testGuilds
+            developmentGuilds: client.config.developmentGuilds
         })
     }
 });
