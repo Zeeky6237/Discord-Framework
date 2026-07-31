@@ -50,7 +50,7 @@ export class MyDiscordClient extends DiscordClient {
                 deployment: client => ({
                     token: client.config.token,
                     applicationId: client.config.clientId,
-                    testGuilds: client.config.testGuilds
+                    developmentGuilds: client.config.developmentGuilds
                 })
             }
         });
@@ -62,10 +62,11 @@ export type SlashCommandContext = FrameworkSlashContext<MyBotClient>;
 ```
 
 The framework automatically detects `commands`, `events`, and `interactions`
-next to the running bot entry file (for example, under `dist` or `scripts`). If
-the client exposes an `interactionRouter` property, that is detected too.
-`moduleRoot` and individual `path` options remain available for non-standard
-build layouts.
+next to the running bot entry file (for example, under `dist` or `scripts`). The
+client owns interaction routing internally; use `dispatchInteraction(...)` from
+your interaction event pipeline and `createInteractionCustomId(...)` when
+building component IDs. `moduleRoot` and individual `path` options remain
+available for non-standard build layouts.
 
 All framework configuration is passed to `super(...)`; there is no separate
 configuration call. Set `logger.level` to control the minimum local log

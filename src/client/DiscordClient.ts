@@ -4,7 +4,9 @@ import path from "node:path";
 import {
     Client as DiscordJsClient,
     Collection,
-    type ClientOptions
+    type CacheType,
+    type ClientOptions,
+    type Interaction
 } from "discord.js";
 
 import {
@@ -24,6 +26,8 @@ import {
 import { SessionManager } from "../services/SessionManager.js";
 import type { BaseCommand } from "../commands/BaseCommand.js";
 import type { BaseEvent } from "../events/BaseEvent.js";
+import type { AnyInteractionRoute } from "../interactions/BaseInteraction.js";
+import { InteractionRouter } from "../interactions/InteractionRouter.js";
 
 import {
     BuiltInHelpCommand,
@@ -55,9 +59,14 @@ export interface ClientLogger {
     close?(): void | Promise<void>;
 }
 
-export interface ClientInteractionRouter {
+export interface ClientInteractionRouter<TClient = any> {
     clear(): void;
-    register(route: any): void;
+    register(route: AnyInteractionRoute<TClient>): void;
+    createCustomId(route: string, ...params: Array<string | number>): string;
+    dispatch(
+        client: TClient,
+        interaction: Interaction<CacheType>
+    ): Promise<boolean>;
 }
 
 export interface CommandDeployment {
@@ -98,7 +107,7 @@ export interface DiscordClientOptions extends ClientOptions {
     interactions?: {
         /** Override automatic detection for non-standard layouts. */
         path?: string;
-        /** Defaults to the client's interactionRouter property. */
+        /** Override the framework-owned interaction router. */
         router?: ClientInteractionRouter;
         enabled?: boolean;
     };
@@ -126,6 +135,7 @@ export abstract class DiscordClient<
     readonly sessions = new SessionManager();
     readonly logger: ClientLogger;
     private readonly moduleConfig: FrameworkModuleConfig;
+    private readonly frameworkInteractionRouter: InteractionRouter<this>;
 
     protected constructor(options: DiscordClientOptions) {
         super(discordJsOptions(options));
@@ -133,6 +143,7 @@ export abstract class DiscordClient<
         this.logger = isClientLogger(options.logger)
             ? options.logger
             : new Logger({ writeToFile: true, ...options.logger });
+        this.frameworkInteractionRouter = new InteractionRouter<this>();
     }
 
     async loadCommands(refresh = false, deploy = false): Promise<void> {
@@ -175,7 +186,6 @@ export abstract class DiscordClient<
 
     async loadInteractions(refresh = false): Promise<void> {
         const router = this.resolveInteractionRouter();
-        if (!router) return;
         const interactionsPath = this.resolveModuleDirectory(
             "interactions",
             this.moduleConfig.interactions?.path
@@ -200,9 +210,21 @@ export abstract class DiscordClient<
 
     async reloadInteractions(): Promise<void> {
         const router = this.resolveInteractionRouter();
-        if (!router) return;
         router.clear();
         await this.loadInteractions(true);
+    }
+
+    createInteractionCustomId(
+        route: string,
+        ...params: Array<string | number>
+    ): string {
+        return this.resolveInteractionRouter().createCustomId(route, ...params);
+    }
+
+    dispatchInteraction(
+        interaction: Interaction<CacheType>
+    ): Promise<boolean> {
+        return this.resolveInteractionRouter().dispatch(this, interaction);
     }
 
     async loadFrameworkModules(): Promise<void> {
@@ -243,14 +265,17 @@ export abstract class DiscordClient<
         await sendInvalidUsage(config, context, message);
     }
 
-    private resolveInteractionRouter(): ClientInteractionRouter | undefined {
+    private resolveInteractionRouter(): ClientInteractionRouter<this> {
         return this.moduleConfig.interactions?.router
-            ?? (this as unknown as { interactionRouter?: ClientInteractionRouter }).interactionRouter;
+            ?? (this as unknown as {
+                interactionRouter?: ClientInteractionRouter;
+            }).interactionRouter
+            ?? this.frameworkInteractionRouter;
     }
 
     private builtInCommands(): BaseCommand<any>[] {
         if (!this.helpEnabled()) return [];
-        const config = this.helpConfig(Boolean(this.resolveInteractionRouter()));
+        const config = this.helpConfig(true);
         return config ? [new BuiltInHelpCommand(config)] : [];
     }
 
@@ -275,12 +300,8 @@ export abstract class DiscordClient<
             helpCommand: helpEnabled,
             invalidUsageHelper: commands.invalidUsageHelper ?? true,
             ...(pagination ? {
-                createPageCustomId: (_client, source, page, userId) => [
-                    route,
-                    source,
-                    page,
-                    userId
-                ].map(value => encodeURIComponent(String(value))).join(":")
+                createPageCustomId: (_client, source, page, userId) =>
+                    this.createInteractionCustomId(route, source, page, userId)
             } : {})
         };
     }
