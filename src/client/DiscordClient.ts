@@ -83,7 +83,9 @@ export interface CommandDeployment {
     developmentGuilds?: Iterable<string>;
 }
 
-export interface DiscordClientOptions extends ClientOptions {
+export interface DiscordClientOptions<
+    TClient extends DiscordClient<any, any, any> = DiscordClient<any, any, any>
+> extends ClientOptions {
     /** Built-in logger settings, or a custom logger instance. */
     logger?: LoggerOptions | ClientLogger;
     /** Embed branding and colors applied by the framework's reply helpers. */
@@ -96,13 +98,13 @@ export interface DiscordClientOptions extends ClientOptions {
     commands?: {
         /** Override automatic detection for non-standard layouts. */
         path?: string;
-        deployment(client: any): CommandDeployment;
+        deployment(client: TClient): CommandDeployment;
         /** Prefix used by message commands and generated usage text. */
-        prefix?(client: any): string;
+        prefix?(client: TClient): string;
         /** Determines owner-only command access and help visibility. */
-        isOwner?(client: any, userId: string): boolean;
+        isOwner?(client: TClient, userId: string): boolean;
         /** Enable and configure the framework-owned help command. */
-        help?: boolean | HelpOptions<any>;
+        help?: boolean | HelpOptions<TClient>;
         /** Show generated usage and examples for invalid syntax. Defaults to true. */
         invalidUsageHelper?: boolean;
     };
@@ -117,13 +119,13 @@ export interface DiscordClientOptions extends ClientOptions {
         /** Override automatic detection for non-standard layouts. */
         path?: string;
         /** Override the framework-owned interaction router. */
-        router?: ClientInteractionRouter;
+        router?: ClientInteractionRouter<TClient>;
         enabled?: boolean;
     };
 }
 
-type FrameworkModuleConfig = Pick<
-    DiscordClientOptions,
+type FrameworkModuleConfig<TClient extends DiscordClient<any, any, any>> = Pick<
+    DiscordClientOptions<TClient>,
     "moduleRoot" | "commands" | "eventsPath" | "events" | "interactions"
 >;
 
@@ -133,8 +135,9 @@ type FrameworkModuleConfig = Pick<
  * hooks while this class owns framework state and cleanup.
  */
 export abstract class DiscordClient<
-    TCommand extends BaseCommand<any> = BaseCommand<any>,
-    TEvent extends BaseEvent<any, any, any> = BaseEvent<any, any, any>
+    TClient extends DiscordClient<any, any, any> = DiscordClient<any, any, any>,
+    TCommand extends BaseCommand<TClient> = BaseCommand<TClient>,
+    TEvent extends BaseEvent<any, any, TClient> = BaseEvent<any, any, TClient>
 > extends DiscordJsClient {
     readonly commands = new Collection<string, TCommand>();
     readonly events = new Collection<
@@ -143,17 +146,17 @@ export abstract class DiscordClient<
     >();
     readonly sessions = new SessionManager();
     readonly logger: ClientLogger;
-    private readonly moduleConfig: FrameworkModuleConfig;
-    private readonly frameworkInteractionRouter: InteractionRouter<this>;
+    private readonly moduleConfig: FrameworkModuleConfig<TClient>;
+    private readonly frameworkInteractionRouter: InteractionRouter<TClient>;
 
-    protected constructor(options: DiscordClientOptions) {
+    protected constructor(options: DiscordClientOptions<TClient>) {
         super(discordJsOptions(options));
         this.moduleConfig = frameworkModuleConfig(options);
         this.logger = isClientLogger(options.logger)
             ? options.logger
             : new Logger({ writeToFile: true, ...options.logger });
         configureTheme(options.theme);
-        this.frameworkInteractionRouter = new InteractionRouter<this>();
+        this.frameworkInteractionRouter = new InteractionRouter<TClient>();
     }
 
     async loadCommands(refresh = false, deploy = false): Promise<void> {
@@ -167,7 +170,7 @@ export abstract class DiscordClient<
             refresh,
             deploy,
             builtInCommands: this.builtInCommands(),
-            ...commands.deployment(this)
+            ...commands.deployment(this.typedClient())
         });
     }
 
@@ -235,7 +238,7 @@ export abstract class DiscordClient<
     dispatchInteraction(
         interaction: Interaction<CacheType>
     ): Promise<boolean> {
-        return this.resolveInteractionRouter().dispatch(this, interaction);
+        return this.resolveInteractionRouter().dispatch(this.typedClient(), interaction);
     }
 
     async loadFrameworkModules(): Promise<void> {
@@ -247,12 +250,12 @@ export abstract class DiscordClient<
 
     /** Prefix used to identify message commands. */
     commandPrefix(): string {
-        return this.moduleConfig.commands?.prefix?.(this) ?? "!";
+        return this.moduleConfig.commands?.prefix?.(this.typedClient()) ?? "!";
     }
 
     /** Whether a user can execute commands marked as owner-only. */
     isCommandOwner(userId: string): boolean {
-        return this.moduleConfig.commands?.isOwner?.(this, userId) ?? false;
+        return this.moduleConfig.commands?.isOwner?.(this.typedClient(), userId) ?? false;
     }
 
     /**
@@ -271,7 +274,7 @@ export abstract class DiscordClient<
     }
 
     async replyInvalidUsage(
-        context: Pick<SlashCommandContext<any> | ChatCommandContext<any>,
+        context: Pick<SlashCommandContext<TClient> | ChatCommandContext<TClient>,
             "client" | "source" | "commandName" | "subcommandName" | "embedReply">,
         message?: string
     ): Promise<void> {
@@ -287,10 +290,10 @@ export abstract class DiscordClient<
         await sendInvalidUsage(config, context, message);
     }
 
-    private resolveInteractionRouter(): ClientInteractionRouter<this> {
+    private resolveInteractionRouter(): ClientInteractionRouter<TClient> {
         return this.moduleConfig.interactions?.router
             ?? (this as unknown as {
-                interactionRouter?: ClientInteractionRouter;
+                interactionRouter?: ClientInteractionRouter<TClient>;
             }).interactionRouter
             ?? this.frameworkInteractionRouter;
     }
@@ -299,22 +302,23 @@ export abstract class DiscordClient<
         if (!this.events.has(Events.InteractionCreate)) {
             this.registerBuiltInEvent(
                 Events.InteractionCreate,
-                new InteractionCreateEvent<this>()
+                new InteractionCreateEvent<TClient>()
             );
         }
         if (!this.events.has(Events.MessageCreate)) {
             this.registerBuiltInEvent(
                 Events.MessageCreate,
-                new MessageCreateEvent<this>()
+                new MessageCreateEvent<TClient>()
             );
         }
     }
 
     private registerBuiltInEvent(
         eventName: string,
-        handler: BaseEvent<any, any, any>
+        handler: BaseEvent<any, any, TClient>
     ): void {
-        const listener = (...args: any[]) => handler.execute(this, args[0]);
+        const listener = (...args: any[]) =>
+            handler.execute(this.typedClient(), args[0]);
         this.on(eventName, listener);
         this.events.set(eventName, {
             handler: handler as TEvent,
@@ -323,10 +327,10 @@ export abstract class DiscordClient<
         this.logger.info(`├─ Loaded built-in event ${eventName}`);
     }
 
-    private builtInCommands(): BaseCommand<any>[] {
+    private builtInCommands(): BaseCommand<TClient>[] {
         if (!this.helpEnabled()) return [];
         const config = this.helpConfig(true);
-        return config ? [new BuiltInHelpCommand(config)] : [];
+        return config ? [new BuiltInHelpCommand<TClient>(config)] : [];
     }
 
     private helpEnabled(): boolean {
@@ -334,7 +338,7 @@ export abstract class DiscordClient<
         return help === true || typeof help === "object";
     }
 
-    private helpConfig(pagination: boolean): HelpCommandConfig<any> | undefined {
+    private helpConfig(pagination: boolean): HelpCommandConfig<TClient> | undefined {
         const commands = this.moduleConfig.commands;
         if (!commands) return;
         const rawHelp = commands.help;
@@ -386,13 +390,19 @@ export abstract class DiscordClient<
         if (detected) this.logger.debug(`Detected ${name} modules at ${detected}`);
         return detected;
     }
+
+    private typedClient(): TClient {
+        return this as unknown as TClient;
+    }
 }
 
 function uniquePaths(paths: string[]): string[] {
     return [...new Set(paths)];
 }
 
-function discordJsOptions(options: DiscordClientOptions): ClientOptions {
+function discordJsOptions<TClient extends DiscordClient<any, any, any>>(
+    options: DiscordClientOptions<TClient>
+): ClientOptions {
     const {
         logger: _logger,
         theme: _theme,
@@ -406,7 +416,9 @@ function discordJsOptions(options: DiscordClientOptions): ClientOptions {
     return clientOptions;
 }
 
-function frameworkModuleConfig(options: DiscordClientOptions): FrameworkModuleConfig {
+function frameworkModuleConfig<TClient extends DiscordClient<any, any, any>>(
+    options: DiscordClientOptions<TClient>
+): FrameworkModuleConfig<TClient> {
     return {
         ...(options.moduleRoot ? { moduleRoot: options.moduleRoot } : {}),
         ...(options.commands ? { commands: options.commands } : {}),

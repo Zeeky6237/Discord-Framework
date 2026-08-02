@@ -34,7 +34,7 @@ import {
     type SlashCommandContext as FrameworkSlashContext
 } from "@zeeky6237/discord-framework";
 
-export class MyDiscordClient extends DiscordClient {
+export class MyDiscordClient extends DiscordClient<MyDiscordClient> {
     constructor() {
         super({
             intents: [...],
@@ -67,16 +67,19 @@ export class MyDiscordClient extends DiscordClient {
     }
 }
 
-export abstract class BaseCommand extends FrameworkCommand<MyBotClient> {}
-export type SlashCommandContext = FrameworkSlashContext<MyBotClient>;
+export abstract class BaseCommand extends FrameworkCommand<MyDiscordClient> {}
+export type SlashCommandContext = FrameworkSlashContext<MyDiscordClient>;
 ```
 
+The self-type (`DiscordClient<MyDiscordClient>`) makes every framework
+configuration callback infer `client` as `MyDiscordClient`. Without a self-type,
+callbacks fall back to the base `DiscordClient` type.
+
 The framework automatically detects `commands`, `events`, and `interactions`
-next to the running bot entry file (for example, under `dist` or `scripts`). The
-client owns interaction routing internally; use `dispatchInteraction(...)` from
-your interaction event pipeline and `createInteractionCustomId(...)` when
-building component IDs. `moduleRoot` and individual `path` options remain
-available for non-standard build layouts.
+next to the running bot entry file (for example, under `dist` or `scripts`). It
+owns the standard command and interaction event pipelines internally; use
+`createInteractionCustomId(...)` when building component IDs. `moduleRoot` and
+individual `path` options remain available for non-standard build layouts.
 
 All framework configuration is passed to `super(...)`; there is no separate
 configuration call. Set `logger.level` to control the minimum local log
