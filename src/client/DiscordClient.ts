@@ -41,6 +41,10 @@ import type {
     ChatCommandContext,
     SlashCommandContext
 } from "../commands/BaseCommand.js";
+import {
+    configureTheme,
+    type DiscordTheme
+} from "../theme/index.js";
 
 
 export interface ClientLogger {
@@ -79,6 +83,8 @@ export interface CommandDeployment {
 export interface DiscordClientOptions extends ClientOptions {
     /** Built-in logger settings, or a custom logger instance. */
     logger?: LoggerOptions | ClientLogger;
+    /** Embed branding and colors applied by the framework's reply helpers. */
+    theme?: Partial<DiscordTheme>;
     /**
      * Runtime directory containing commands, events, and interactions.
      * Normally omitted because it is detected from the process entry file.
@@ -143,6 +149,7 @@ export abstract class DiscordClient<
         this.logger = isClientLogger(options.logger)
             ? options.logger
             : new Logger({ writeToFile: true, ...options.logger });
+        if (options.theme) configureTheme(options.theme);
         this.frameworkInteractionRouter = new InteractionRouter<this>();
     }
 
@@ -345,6 +352,7 @@ function uniquePaths(paths: string[]): string[] {
 function discordJsOptions(options: DiscordClientOptions): ClientOptions {
     const {
         logger: _logger,
+        theme: _theme,
         moduleRoot: _moduleRoot,
         commands: _commands,
         eventsPath: _eventsPath,

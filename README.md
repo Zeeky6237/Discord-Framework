@@ -46,6 +46,15 @@ export class MyDiscordClient extends DiscordClient {
                     username: "My Bot Logs"
                 }
             },
+            theme: {
+                name: "My Bot",
+                footer: "My Bot",
+                iconURL: "https://example.com/icon.png",
+                primary: 0x02ff6b,
+                member: 0x075f2b,
+                warning: 0xffc857,
+                error: 0xff4d67
+            },
             commands: {
                 deployment: client => ({
                     token: client.config.token,
@@ -81,7 +90,7 @@ environment variable rather than source control.
 `DiscordClient` creates the shared rotating logger automatically. The `logger`
 option accepts either built-in logger settings or a custom logger instance.
 
-Configure branding once at startup with `configureTheme(...)`. Use
+Set embed branding and colors with the `theme` client option. Use
 `interactionResponder(...)` and `messageResponder(...)` to provide identical
 `reply` and `embedReply` behavior in every bot.
 

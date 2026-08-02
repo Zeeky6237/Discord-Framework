@@ -23,6 +23,7 @@ export const DEFAULT_THEME: DiscordTheme = {
 
 let activeTheme: DiscordTheme = { ...DEFAULT_THEME };
 
+/** @deprecated Pass theme through DiscordClientOptions instead. */
 export function configureTheme(theme: Partial<DiscordTheme>): void {
     activeTheme = { ...activeTheme, ...theme };
 }
