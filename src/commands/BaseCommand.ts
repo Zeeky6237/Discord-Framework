@@ -25,10 +25,11 @@ export type CommandReply = string | {
 };
 
 export interface CommandEmbedReply {
-    title: string;
-    description: string;
+    title?: string;
+    description?: string;
     tone?: EmbedTone;
     fields?: APIEmbedField[];
+    footer?: string;
     content?: string;
     components?: ActionRowBuilder<ButtonBuilder>[];
 }

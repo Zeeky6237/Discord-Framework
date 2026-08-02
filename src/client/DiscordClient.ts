@@ -149,7 +149,7 @@ export abstract class DiscordClient<
         this.logger = isClientLogger(options.logger)
             ? options.logger
             : new Logger({ writeToFile: true, ...options.logger });
-        if (options.theme) configureTheme(options.theme);
+        configureTheme(options.theme);
         this.frameworkInteractionRouter = new InteractionRouter<this>();
     }
 
