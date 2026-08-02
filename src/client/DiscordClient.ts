@@ -4,6 +4,7 @@ import path from "node:path";
 import {
     Client as DiscordJsClient,
     Collection,
+    Events,
     type CacheType,
     type ClientOptions,
     type Interaction
@@ -26,6 +27,8 @@ import {
 import { SessionManager } from "../services/SessionManager.js";
 import type { BaseCommand } from "../commands/BaseCommand.js";
 import type { BaseEvent } from "../events/BaseEvent.js";
+import { InteractionCreateEvent } from "../events/InteractionCreateEvent.js";
+import { MessageCreateEvent } from "../events/MessageCreateEvent.js";
 import type { AnyInteractionRoute } from "../interactions/BaseInteraction.js";
 import { InteractionRouter } from "../interactions/InteractionRouter.js";
 
@@ -96,7 +99,7 @@ export interface DiscordClientOptions extends ClientOptions {
         deployment(client: any): CommandDeployment;
         /** Prefix used by message commands and generated usage text. */
         prefix?(client: any): string;
-        /** Determines whether a user has bot-owner help visibility. */
+        /** Determines owner-only command access and help visibility. */
         isOwner?(client: any, userId: string): boolean;
         /** Enable and configure the framework-owned help command. */
         help?: boolean | HelpOptions<any>;
@@ -175,6 +178,7 @@ export abstract class DiscordClient<
 
     async loadEvents(refresh = false): Promise<void> {
         if (this.moduleConfig.events?.enabled === false) return;
+        this.loadBuiltInEvents();
         const eventsPath = this.resolveModuleDirectory(
             "events",
             this.moduleConfig.events?.path ?? this.moduleConfig.eventsPath
@@ -238,6 +242,17 @@ export abstract class DiscordClient<
         await this.loadCommands();
         await this.loadEvents();
         await this.loadInteractions();
+        this.startFrameworkServices();
+    }
+
+    /** Prefix used to identify message commands. */
+    commandPrefix(): string {
+        return this.moduleConfig.commands?.prefix?.(this) ?? "!";
+    }
+
+    /** Whether a user can execute commands marked as owner-only. */
+    isCommandOwner(userId: string): boolean {
+        return this.moduleConfig.commands?.isOwner?.(this, userId) ?? false;
     }
 
     /**
@@ -278,6 +293,34 @@ export abstract class DiscordClient<
                 interactionRouter?: ClientInteractionRouter;
             }).interactionRouter
             ?? this.frameworkInteractionRouter;
+    }
+
+    private loadBuiltInEvents(): void {
+        if (!this.events.has(Events.InteractionCreate)) {
+            this.registerBuiltInEvent(
+                Events.InteractionCreate,
+                new InteractionCreateEvent<this>()
+            );
+        }
+        if (!this.events.has(Events.MessageCreate)) {
+            this.registerBuiltInEvent(
+                Events.MessageCreate,
+                new MessageCreateEvent<this>()
+            );
+        }
+    }
+
+    private registerBuiltInEvent(
+        eventName: string,
+        handler: BaseEvent<any, any, any>
+    ): void {
+        const listener = (...args: any[]) => handler.execute(this, args[0]);
+        this.on(eventName, listener);
+        this.events.set(eventName, {
+            handler: handler as TEvent,
+            listener
+        });
+        this.logger.info(`├─ Loaded built-in event ${eventName}`);
     }
 
     private builtInCommands(): BaseCommand<any>[] {

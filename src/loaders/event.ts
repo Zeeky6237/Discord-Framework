@@ -19,27 +19,34 @@ export async function loadEvents(
     for (const eventName of fs.readdirSync(eventsPath)) {
         const eventPath = path.join(eventsPath, eventName);
         if (!fs.statSync(eventPath).isDirectory()) continue;
+        const existing = client.events.get(eventName);
         const systemFile = fs.readdirSync(eventPath).find(file => file.endsWith("system.js"));
-        if (!systemFile) continue;
-        const imported = await importFile<BaseEvent<unknown, any, any>>(
-            path.join(eventPath, systemFile),
-            refresh
-        );
-        const handler = imported.default;
-        if (!handler) continue;
-        const listener = (...args: unknown[]) => handler.execute(client as never, args[0]);
-        client.on(eventName, listener);
-        client.events.set(eventName, { handler, listener });
-        const stagesPath = path.join(eventPath, "stages");
-        if (!fs.existsSync(stagesPath)) continue;
-        for (const file of fs.readdirSync(stagesPath).filter(name => name.endsWith(".js"))) {
-            const stage = await importFile<(event: BaseEvent<unknown, any, any>) => void>(
-                path.join(stagesPath, file),
+        let handler = existing?.handler;
+        if (!handler) {
+            if (!systemFile) continue;
+            const imported = await importFile<BaseEvent<unknown, any, any>>(
+                path.join(eventPath, systemFile),
                 refresh
             );
-            stage.default?.(handler);
-            client.logger.info(`│   └ Loaded event stage ${file.split(".")[0]}`);
+            const importedHandler = imported.default;
+            if (!importedHandler) continue;
+            handler = importedHandler;
+            const listener = (...args: unknown[]) =>
+                importedHandler.execute(client as never, args[0]);
+            client.on(eventName, listener);
+            client.events.set(eventName, { handler, listener });
         }
-        client.logger.info(`├─ Loaded event ${eventName}`);
+        const stagesPath = path.join(eventPath, "stages");
+        if (fs.existsSync(stagesPath)) {
+            for (const file of fs.readdirSync(stagesPath).filter(name => name.endsWith(".js"))) {
+                const stage = await importFile<(event: BaseEvent<unknown, any, any>) => void>(
+                    path.join(stagesPath, file),
+                    refresh
+                );
+                stage.default?.(handler);
+                client.logger.info(`│   └ Loaded event stage ${file.split(".")[0]}`);
+            }
+        }
+        if (!existing) client.logger.info(`├─ Loaded event ${eventName}`);
     }
 }
