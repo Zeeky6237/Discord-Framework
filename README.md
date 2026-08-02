@@ -53,7 +53,8 @@ export class MyDiscordClient extends DiscordClient {
                 primary: 0x02ff6b,
                 member: 0x075f2b,
                 warning: 0xffc857,
-                error: 0xff4d67
+                error: 0xff4d67,
+                showRequester: false
             },
             commands: {
                 deployment: client => ({
@@ -92,7 +93,23 @@ option accepts either built-in logger settings or a custom logger instance.
 
 Set embed branding and colors with the `theme` client option. Use
 `interactionResponder(...)` and `messageResponder(...)` to provide identical
-`reply` and `embedReply` behavior in every bot.
+`reply` and `embedReply` behavior in every bot. The theme is optional; omitted
+colors use framework defaults, while omitted branding does not add an author,
+branded footer, or icon to the embed. Empty branding values are also left off
+instead of being sent to Discord.
+
+Set `theme.showRequester` to `false` to disable automatic requester footers.
+Individual embed replies can provide their own footer:
+
+```ts
+await ctx.embedReply({
+    description: "Configuration saved.",
+    footer: "Settings"
+});
+```
+
+A footer supplied on an individual reply overrides the automatic requester
+footer. Use `footer: ""` to omit the footer for only that reply.
 
 Use the shared rotating logger instead of keeping a copy in each bot:
 

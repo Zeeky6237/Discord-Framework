@@ -9,6 +9,7 @@ export interface DiscordTheme {
     name: string;
     footer: string;
     iconURL?: string;
+    showRequester: boolean;
 }
 
 export const DEFAULT_THEME: DiscordTheme = {
@@ -16,16 +17,17 @@ export const DEFAULT_THEME: DiscordTheme = {
     member: 0x075f2b,
     error: 0xff4d67,
     warning: 0xffc857,
-    name: "Zeeky's Discord Framework",
+    name: "",
     footer: "",
-    iconURL: ""
+    iconURL: "",
+    showRequester: true
 };
 
 let activeTheme: DiscordTheme = { ...DEFAULT_THEME };
 
 /** @deprecated Pass theme through DiscordClientOptions instead. */
-export function configureTheme(theme: Partial<DiscordTheme>): void {
-    activeTheme = { ...activeTheme, ...theme };
+export function configureTheme(theme: Partial<DiscordTheme> = {}): void {
+    activeTheme = { ...DEFAULT_THEME, ...theme };
 }
 
 export function getTheme(): Readonly<DiscordTheme> {
@@ -35,19 +37,26 @@ export function getTheme(): Readonly<DiscordTheme> {
 export function themedEmbed(options: CommandEmbedReply): EmbedBuilder {
     const tone = options.tone ?? "info";
     const style = styles(activeTheme)[tone];
-    return addFields(
-        new EmbedBuilder()
-            .setColor(style.color)
-            .setAuthor({
-                name: activeTheme.name,
-                ...(activeTheme.iconURL ? { iconURL: activeTheme.iconURL } : {})
-            })
-            .setTitle(`${style.icon}  ${options.title}`)
-            .setDescription(options.description)
-            .setFooter({ text: activeTheme.footer })
-            .setTimestamp(),
-        options.fields
+    const title = nonEmpty(options.title);
+    const description = nonEmpty(options.description);
+    const embed = new EmbedBuilder()
+        .setColor(style.color)
+        .setTimestamp();
+    const authorName = nonEmpty(activeTheme.name);
+    const iconURL = nonEmpty(activeTheme.iconURL);
+    const footer = nonEmpty(
+        options.footer === undefined ? activeTheme.footer : options.footer
     );
+    if (title) embed.setTitle(`${style.icon}  ${title}`);
+    if (description) embed.setDescription(description);
+    if (authorName) {
+        embed.setAuthor({
+            name: authorName,
+            ...(iconURL ? { iconURL } : {})
+        });
+    }
+    if (footer) embed.setFooter({ text: footer });
+    return addFields(embed, options.fields);
 }
 
 export function successEmbed(
@@ -79,10 +88,26 @@ export function withRequester(
     displayName: string,
     avatarURL?: string
 ): EmbedBuilder {
+    if (!activeTheme.showRequester) return embed;
+
+    const branding = nonEmpty(activeTheme.name);
+    const requester = nonEmpty(displayName) ?? "Unknown user";
+    const requesterAvatarURL = nonEmpty(avatarURL);
+    const existingFooter = nonEmpty(embed.data.footer?.text);
+    const existingFooterIconURL = nonEmpty(embed.data.footer?.icon_url);
+    const footerPrefix = existingFooter ?? branding;
+    const footerIconURL = requesterAvatarURL ?? existingFooterIconURL;
     return embed.setFooter({
-        text: `${activeTheme.name}  •  Requested by ${displayName}`,
-        ...(avatarURL ? { iconURL: avatarURL } : {})
+        text: footerPrefix
+            ? `${footerPrefix}  •  Requested by ${requester}`
+            : `Requested by ${requester}`,
+        ...(footerIconURL ? { iconURL: footerIconURL } : {})
     });
+}
+
+function nonEmpty(value: string | undefined): string | undefined {
+    const normalized = value?.trim();
+    return normalized || undefined;
 }
 
 function addFields(embed: EmbedBuilder, fields?: APIEmbedField[]): EmbedBuilder {

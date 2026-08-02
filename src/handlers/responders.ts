@@ -73,11 +73,14 @@ function prepareEmbed(
     displayName: string,
     avatarURL: string
 ): EmbedBuilder {
-    return withRequester(
-        input instanceof EmbedBuilder ? input : themedEmbed(input),
-        displayName,
-        avatarURL
-    );
+    const embed = input instanceof EmbedBuilder ? input : themedEmbed(input);
+    const hasExplicitFooter = input instanceof EmbedBuilder
+        ? input.data.footer !== undefined
+        : input.footer !== undefined;
+
+    return hasExplicitFooter
+        ? embed
+        : withRequester(embed, displayName, avatarURL);
 }
 
 function embedPayload(
